@@ -1,56 +1,54 @@
+import os
 import streamlit as st
-from openai import OpenAI
+import openai
+from dotenv import load_dotenv
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
-)
+load_dotenv()
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+# OpenAI API-Schlüssel hier einfügen
+openai.api_key = os.getenv("OPEN_AI_KEY")  
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+# Titel und Beschreibung der App
+st.title("Ask GPT-3.5 Turbo")
+st.write("""
+This app allows you to interact with OpenAI's GPT-3.5 Turbo. 
+Type a question below, and click 'Send' to receive a response.
+""")
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+# Eingabefeld für Benutzer
+user_input = st.text_area("Enter your question here:", height=100, placeholder="What would you like to know?")
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+# Antwort in der Session initialisieren
+if "response" not in st.session_state:
+    st.session_state.response = ""
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+# Buttons für "Send" und "Refresh"
+col1, col2 = st.columns(2)
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+with col1:
+    if st.button("Send"):
+        if not user_input.strip():
+            st.warning("Please enter a question!")
+        else:
+            try:
+                with st.spinner("Fetching response from GPT-3.5 Turbo..."):
+                    # API-Aufruf an OpenAI
+                    response = openai.ChatCompletion.create(
+                        model="gpt-3.5-turbo",
+                        messages=[
+                            {"role": "system", "content": "You are a helpful assistant."},
+                            {"role": "user", "content": user_input}
+                        ]
+                    )
+                    # Antwort speichern
+                    st.session_state.response = response['choices'][0]['message']['content']
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
 
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
-        )
+with col2:
+    if st.button("Refresh"):
+        st.session_state.response = ""
+        user_input = ""
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+# Antwort anzeigen
+st.text_area("Response:", value=st.session_state.response, height=150, disabled=True)
